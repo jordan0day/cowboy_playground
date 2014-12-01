@@ -8,10 +8,12 @@ echo "current:"
 echo $CURRENT
 
 cd "$CURRENT/example_servers/sample_site_1"
+mix do deps.get, compile
 mix phoenix.start &
 SERVER1=$!
 
 cd "$CURRENT/example_servers/sample_site_2"
+mix do deps.get, compile
 mix phoenix.start &
 SERVER2=$!
 
