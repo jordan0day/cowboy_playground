@@ -4,6 +4,6 @@ defmodule SampleSite_2.PageController do
   plug :action
 
   def index(conn, _params) do
-    render conn, "index.html"
+    text conn, "Hello from the server running at #{inspect conn.host} port #{inspect conn.port}\n"
   end
 end

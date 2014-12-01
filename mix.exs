@@ -14,7 +14,7 @@ defmodule CowboyPlayground.Mixfile do
   def application do
     [
       mod: { CowboyPlayground, [] },
-      applications: [:logger, :cowboy]
+      applications: [:logger, :cowboy, :httpoison]
     ]
   end
 
@@ -29,7 +29,8 @@ defmodule CowboyPlayground.Mixfile do
   # Type `mix help deps` for more examples and options
   defp deps do
     [
-      {:cowboy, "1.0.0"}
+      {:cowboy, "1.0.0"},
+      {:httpoison, "0.5.0"}
     ]
   end
 end
