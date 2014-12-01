@@ -4,6 +4,7 @@ defmodule SampleSite.PageController do
   plug :action
 
   def index(conn, _params) do
-    render conn, "index.html"
+    text conn, "conn is #{inspect conn}"
+    #render conn, "index.html"
   end
 end
