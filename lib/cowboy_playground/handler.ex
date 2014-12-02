@@ -4,113 +4,100 @@ defmodule CowboyPlayground.Handler do
   @servers [%{host: "localhost", port: 4010}, %{host: "localhost", port: 4011}]
 
   def on_request(req) do
-    Logger.debug "================================================"
-    Logger.debug "================ in on_request! ================"
-    Logger.debug "#{inspect req}"
+    # TODO: Move request handling out of handle and into on_request,
+    # which should slightly speed up routing time.
     req
   end
 
   def init({transport, proto_name}, req, opts) do
-    started = :erlang.now()
-    Logger.debug "================ initting httphandler! ================"
-    Logger.debug "transport: #{inspect transport}"
-    Logger.debug "proto_name: #{inspect proto_name}"
+    start_time = :erlang.now()
 
     # Seed the RNG, since the httphandler is re-initted for each request, we 
     # need to re-seed on init -- otherwise :random.uniform will always return
     # the same result.
     :random.seed(:erlang.now())
 
-    {:ok, req, started}
+    {:ok, req, start_time}
   end
 
   def handle(req, state) do
-    Logger.debug "================ in handle... ================"
-    # Logger.debug "Original request:#{inspect req}"
-    
-    {bindings, req} = :cowboy_req.bindings(req)
-    # Logger.debug "bindings:#{inspect bindings}"
+
+    {:ok, body, req} = :cowboy_req.body(req)
+    # TODO: handle chunked request bodies larger than 8MB. By default, 8MB is
+    # the most Cowboy will read from the request.
+    # See http://ninenines.eu/docs/en/cowboy/1.0/manual/cowboy_req/#request_body_related_exports
 
     {cookies, req} = :cowboy_req.cookies(req)
-    Logger.debug "cookies:#{inspect cookies}"
 
     {headers, req} = :cowboy_req.headers(req)
-    Logger.debug "headers:#{inspect headers}"
 
-    #{metadata, req} = :cowboy_req.meta(req)
-    #Logger.debug "metadata:#{inspect metadata}"
-
-    {peer, req} = :cowboy_req.peer(req)
-    Logger.debug "peer:#{inspect peer}"
+    # {peer, req} = :cowboy_req.peer(req)
 
     {querystring, req} = :cowboy_req.qs(req)
-    Logger.debug "querystring:#{inspect querystring}"
 
-    {version, req} = :cowboy_req.version(req)
-    Logger.debug "version:#{inspect version}"
+    # {version, req} = :cowboy_req.version(req)
 
     {host, req} = :cowboy_req.host(req)
-    Logger.debug "host: #{inspect host}"
+
     {hostinfo, req} = :cowboy_req.host_info(req)
-    Logger.debug "hostinfo: #{inspect hostinfo}"
+
     {host_url, req} = :cowboy_req.host_url(req)
-    Logger.debug "host_Url: #{inspect host_url}"
+
     {port, req} = :cowboy_req.port(req)
-    Logger.debug "port: #{inspect port}"
+
     {path, req} = :cowboy_req.path(req)
-    Logger.debug "path: #{inspect path}"
+
     {url, req} = :cowboy_req.url(req)
-    Logger.debug "url: #{inspect url}"
 
     {method, req} = :cowboy_req.method(req)
-    Logger.debug "method: #{inspect method}"
 
-    server = get_random_server
-    Logger.debug "forwarding request to #{server.host}, port #{server.port}"
+    Logger.debug "Processing #{method} request for #{url}"
 
+    server = get_random_server()
+ 
     new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server.host}:#{server.port}")
-
-    Logger.debug "new_url: #{new_url}"
 
     options = Application.get_env(:cowboy_playground, :httpoison_config, [])
 
-    Logger.debug "options: #{inspect options}"
+    method = case method do
+      "DELETE" -> :delete
+      "GET" -> :get
+      "HEAD" -> :head
+      "OPTIONS" -> :options
+      "PATCH" -> :patch
+      "POST" -> :post
+      "PUT" -> :put
+      other -> 
+        # TODO: Decide if we want to reject non-standard request methods, add
+        # a whitelist, or something else. This current implementation is
+        # unsafe, as an attacker could crash the router by sending many
+        # requests with unique methods -- atoms are never garbage collected.
+        # See here: http://elixir-lang.org/getting_started/mix_otp/3.html
+        other |> String.downcase |> String.to_atom
+    end
 
-    case method do
-      "GET" ->
-        try do
-          {time, {result, response}} = :timer.tc(HTTPoison, :get, [new_url])
-          Logger.debug "Call to #{new_url} completed in #{div(time, 1000)}ms."
-          Logger.debug "result: #{inspect result}"
-          Logger.debug "response: #{inspect response}"
-          response_headers = response.headers
-                              |> Map.keys
-                              |> Enum.map(fn key ->
-                                {key, response.headers[key]}
-                              end)
-          {:ok, req} = :cowboy_req.reply(response.status_code, response_headers, response.body, req)
+    try do
+      {time, {result, response}} = :timer.tc(HTTPoison, :request, [method, new_url, body, headers])
+      Logger.debug "Call to #{new_url} completed with #{inspect result} in #{div(time, 1000)}ms."
 
-          {:ok, req, {state, time}}
-        rescue
-          e ->
-            Logger.debug "ERROR! : #{inspect e}"
-            {:error, req, {state, 0}}
-        end
+      {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response.headers), response.body, req)
+
+      {:ok, req, {state, time}}
+    rescue
+      e ->
+        Logger.error inspect(e)
+        {:error, req, {state, 0}}
     end
   end
 
   def terminate(reason, req, state) do
-    start = elem(state, 0)
+    start_time = elem(state, 0)
     req_time = elem(state, 1)
 
-    total_time = :timer.now_diff(:erlang.now(), start)
-    Logger.debug "================ in terminate... ================"
-    Logger.debug "reason: #{inspect reason}"
-    Logger.debug "request: #{inspect req}"
-    Logger.debug inspect(state)
-    Logger.debug "Total request time: #{inspect(div(total_time, 1000))}ms"
-    Logger.debug "Total request time(in router only): #{inspect(div(total_time - req_time, 1000))}ms"
-    Logger.debug "================================================="
+    total_time = :timer.now_diff(:erlang.now(), start_time)
+
+    Logger.info "Total request time (time in router): #{inspect(div(total_time, 1000))}ms (#{inspect(div(total_time - req_time, 1000))}ms)"
+    :ok
   end
 
   defp get_random_server do

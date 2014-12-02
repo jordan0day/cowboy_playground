@@ -7,6 +7,6 @@ defmodule CowboyPlayground do
 
     IO.puts "dispatch: #{inspect dispatch}"
 
-    :cowboy.start_http(:playground, 2, [{:port, 8080}], proto_opts)
+    :cowboy.start_http(:playground, 100, [{:port, 8080}], proto_opts)
   end
 end
