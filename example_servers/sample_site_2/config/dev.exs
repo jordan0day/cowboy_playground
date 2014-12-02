@@ -1,6 +1,6 @@
 use Mix.Config
 
-config :phoenix, SampleSite_2.Router,
+config :phoenix, SampleSite.Router,
   http: [port: System.get_env("PORT") || 4011],
   debug_errors: true
 
