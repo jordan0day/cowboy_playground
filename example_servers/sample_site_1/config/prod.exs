@@ -13,7 +13,7 @@ use Mix.Config
 
 config :phoenix, SampleSite.Router,
   url: [host: "example.com"],
-  http: [port: System.get_env("PORT")],
+  http: [port: System.get_env("PORT") || 4010],
   secret_key_base: "cs6HeR4zqdvsu93AV+4hW9+fctKOmbA/Yr8ioTQp+g+fnEKG834CmD/hyn98a1NWMy3wCYqfDTrfuyfzyTqYIg=="
 
 config :logger,

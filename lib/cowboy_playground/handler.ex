@@ -6,6 +6,7 @@ defmodule CowboyPlayground.Handler do
   def on_request(req) do
     # TODO: Move request handling out of handle and into on_request,
     # which should slightly speed up routing time.
+    Logger.debug inspect(req)
     req
   end
 
@@ -23,6 +24,7 @@ defmodule CowboyPlayground.Handler do
   def handle(req, state) do
 
     {:ok, body, req} = :cowboy_req.body(req)
+    Logger.debug inspect(body)
     # TODO: handle chunked request bodies larger than 8MB. By default, 8MB is
     # the most Cowboy will read from the request.
     # See http://ninenines.eu/docs/en/cowboy/1.0/manual/cowboy_req/#request_body_related_exports
