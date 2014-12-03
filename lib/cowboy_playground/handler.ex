@@ -1,7 +1,6 @@
 require Logger
 
 defmodule CowboyPlayground.Handler do
-  @servers [%{host: "localhost", port: 4010}, %{host: "localhost", port: 4011}]
 
   def on_request(req) do
     # TODO: Move request handling out of handle and into on_request,
@@ -10,13 +9,8 @@ defmodule CowboyPlayground.Handler do
     req
   end
 
-  def init({transport, proto_name}, req, opts) do
+  def init({_transport, _proto_name}, req, opts) do
     start_time = :erlang.now()
-
-    # Seed the RNG, since the httphandler is re-initted for each request, we 
-    # need to re-seed on init -- otherwise :random.uniform will always return
-    # the same result.
-    :random.seed(:erlang.now())
 
     {:ok, req, start_time}
   end
@@ -24,7 +18,7 @@ defmodule CowboyPlayground.Handler do
   def handle(req, state) do
 
     {:ok, body, req} = :cowboy_req.body(req)
-    Logger.debug inspect(body)
+    
     # TODO: handle chunked request bodies larger than 8MB. By default, 8MB is
     # the most Cowboy will read from the request.
     # See http://ninenines.eu/docs/en/cowboy/1.0/manual/cowboy_req/#request_body_related_exports
@@ -55,11 +49,9 @@ defmodule CowboyPlayground.Handler do
 
     Logger.debug "Processing #{method} request for #{url}"
 
-    server = get_random_server()
+    {server_host, server_port} = get_random_server(host, port)
  
-    new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server.host}:#{server.port}")
-
-    options = Application.get_env(:cowboy_playground, :httpoison_config, [])
+    new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
 
     method = case method do
       "DELETE" -> :delete
@@ -92,7 +84,7 @@ defmodule CowboyPlayground.Handler do
     end
   end
 
-  def terminate(reason, req, state) do
+  def terminate(_reason, _req, state) do
     start_time = elem(state, 0)
     req_time = elem(state, 1)
 
@@ -102,8 +94,12 @@ defmodule CowboyPlayground.Handler do
     :ok
   end
 
-  defp get_random_server do
-    index = :random.uniform(length(@servers)) - 1
-    Enum.at(@servers, index)
+  # TODO: Look into using port in the future...
+  defp get_random_server(host, _port) do
+    routes = ConCache.get(:routes, host)
+    Logger.debug "Routes matching #{host}: #{inspect routes}"
+
+    index = :random.uniform(length(routes)) - 1
+    Enum.at(routes, index)
   end
 end
