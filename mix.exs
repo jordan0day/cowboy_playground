@@ -14,7 +14,7 @@ defmodule CowboyPlayground.Mixfile do
   def application do
     [
       mod: { CowboyPlayground, [] },
-      applications: [:logger, :cowboy, :httpoison, :con_cache]
+      applications: [:logger, :cowboy, :httpoison, :con_cache, :postgrex, :ecto]
     ]
   end
 
@@ -31,7 +31,9 @@ defmodule CowboyPlayground.Mixfile do
     [
       {:cowboy, "1.0.0"},
       {:httpoison, "0.5.0"},
-      {:con_cache, "0.7.0"}
+      {:con_cache, "0.7.0"},
+      {:ecto, "0.2.5"},
+      {:postgrex, "0.6.0"}
     ]
   end
 end

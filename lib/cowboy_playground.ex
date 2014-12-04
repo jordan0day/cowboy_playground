@@ -18,7 +18,9 @@ defmodule CowboyPlayground do
     IO.puts "cowboy_pid: #{inspect cowboy_pid}"
 
     children = [
-      # Start up ConCache, don't let items expire
+      worker(CowboyPlayground.Repo, []),
+
+      # Start up ConCache, see ttl to zero so items won't expire.
       worker(ConCache, [[ttl: 0], [name: :routes]])
     ]
 
