@@ -41,6 +41,10 @@ defmodule CowboyPlayground.Handler do
 
     {port, req} = :cowboy_req.port(req)
 
+    if port == nil do
+      port = 80
+    end
+
     {path, req} = :cowboy_req.path(req)
 
     {url, req} = :cowboy_req.url(req)
@@ -49,39 +53,47 @@ defmodule CowboyPlayground.Handler do
 
     Logger.debug "Processing #{method} request for #{url}"
 
-    {server_host, server_port} = get_random_server(host, port)
- 
-    new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
+    # TODO: Handle when we don't have a route matching what's requested
+    # Going with returning 503 here, that seems to be AWS's behavior for an ELB
+    # that doesn't have any associated instances.
+    case get_random_server(host, port) do
+      nil ->
+        {:ok, req} = :cowboy_req.reply(503, req)
+        {:ok, req, {state, 0}}
 
-    method = case method do
-      "DELETE" -> :delete
-      "GET" -> :get
-      "HEAD" -> :head
-      "OPTIONS" -> :options
-      "PATCH" -> :patch
-      "POST" -> :post
-      "PUT" -> :put
-      other -> 
-        # TODO: Decide if we want to reject non-standard request methods, add
-        # a whitelist, or something else. This current implementation is
-        # unsafe, as an attacker could crash the router by sending many
-        # requests with unique methods -- atoms are never garbage collected.
-        # See here: http://elixir-lang.org/getting_started/mix_otp/3.html
-        other |> String.downcase |> String.to_atom
-    end
+      {server_host, server_port} ->
+        new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
 
-    try do
-      {time, {result, response}} = :timer.tc(HTTPoison, :request, [method, new_url, body, headers])
-      Logger.debug "Call to #{new_url} completed with #{inspect result} in #{div(time, 1000)}ms."
+        method = case method do
+          "DELETE" -> :delete
+          "GET" -> :get
+          "HEAD" -> :head
+          "OPTIONS" -> :options
+          "PATCH" -> :patch
+          "POST" -> :post
+          "PUT" -> :put
+          other -> 
+            # TODO: Decide if we want to reject non-standard request methods, add
+            # a whitelist, or something else. This current implementation is
+            # unsafe, as an attacker could crash the router by sending many
+            # requests with unique methods -- atoms are never garbage collected.
+            # See here: http://elixir-lang.org/getting_started/mix_otp/3.html
+            other |> String.downcase |> String.to_atom
+        end
 
-      {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response.headers), response.body, req)
+        try do
+          {time, {result, response}} = :timer.tc(HTTPoison, :request, [method, new_url, body, headers])
+          Logger.debug "Call to #{new_url} completed with #{inspect result} in #{div(time, 1000)}ms."
 
-      {:ok, req, {state, time}}
-    rescue
-      e ->
-        Logger.error inspect(e)
-        {:error, req, {state, 0}}
-    end
+          {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response.headers), response.body, req)
+
+          {:ok, req, {state, time}}
+        rescue
+          e ->
+            Logger.error inspect(e)
+            {:error, req, {state, 0}}
+        end
+    end    
   end
 
   def terminate(_reason, _req, state) do
@@ -94,10 +106,17 @@ defmodule CowboyPlayground.Handler do
     :ok
   end
 
-  # TODO: Look into using port in the future...
-  defp get_random_server(host, _port) do
-    routes = ConCache.get(:routes, host)
+  defp get_random_server(host, port) do
+    routes = ConCache.get(:routes, "#{host}:#{port}")
     Logger.debug "Routes matching #{host}: #{inspect routes}"
+
+    case routes do
+      nil -> nil
+      [route | []] -> route
+      routes ->
+        index = :random.uniform(length(routes)) - 1
+        Enum.at(routes, index)
+    end
 
     index = :random.uniform(length(routes)) - 1
     Enum.at(routes, index)

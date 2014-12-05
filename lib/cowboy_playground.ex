@@ -19,9 +19,13 @@ defmodule CowboyPlayground do
 
     children = [
       worker(CowboyPlayground.Repo, []),
-
+      
       # Start up ConCache, see ttl to zero so items won't expire.
-      worker(ConCache, [[ttl: 0], [name: :routes]])
+      worker(ConCache, [[ttl: 0], [name: :routes]]),
+
+      # The RouteLoader is the process that handles keeping the :routes cache
+      # up-to-date.
+      worker(CowboyPlayground.RouteLoader, [])
     ]
 
     {:ok, pid} = Supervisor.start_link(children, [strategy: :one_for_one, name: CloudosBuildServer.Supervisor])
@@ -29,7 +33,7 @@ defmodule CowboyPlayground do
 
     # TODO: Read the routes in from some kind of database. Eventually have a
     # child process that refreshes the route list every 300 seconds or so...
-    ConCache.put(:routes, "localhost", [{"localhost", 4010}, {"localhost", 4011}])
+    #ConCache.put(:routes, "localhost", [{"localhost", 4010}, {"localhost", 4011}])
 
     {:ok, pid}
   end
