@@ -18,7 +18,7 @@ defmodule CowboyPlayground.Handler do
   def handle(req, state) do
     {path, req} = :cowboy_req.path(req)
 
-    if path == "cloudos_router_status" do
+    if path == "/cloudos_router_status" do
       # Ignore everything else if the request is just the ELB's healthcheck
       req = handle_status_request(req)
       {:ok, req, {state, 0}}
@@ -117,7 +117,7 @@ defmodule CowboyPlayground.Handler do
   end
 
   defp handle_status_request(req) do
-    status = case Agent.get(__MODULE__, fn state -> state end) do
+    status = case Agent.get(CowboyPlayground.RouteServer, fn state -> state end) do
       {_started, nil} ->
         # Routes haven't been loaded yet, we can't process requests...
         503
