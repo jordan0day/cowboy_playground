@@ -25,7 +25,7 @@ defmodule CowboyPlayground do
 
       # The RouteLoader is the process that handles keeping the :routes cache
       # up-to-date.
-      worker(CowboyPlayground.RouteLoader, [])
+      worker(CowboyPlayground.RouteServer, [])
     ]
 
     {:ok, pid} = Supervisor.start_link(children, [strategy: :one_for_one, name: CloudosBuildServer.Supervisor])

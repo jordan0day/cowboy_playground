@@ -1,6 +1,6 @@
 require Logger
 
-defmodule CowboyPlayground.RouteLoader do
+defmodule CowboyPlayground.RouteServer do
   import Ecto.Query
 
   alias CowboyPlayground.DB.Models.Host
@@ -9,54 +9,94 @@ defmodule CowboyPlayground.RouteLoader do
 
   @spec start_link() :: {:ok, pid} | {:error, String.t}
   def start_link do
-    Logger.debug "Starting the RouteLoader process #{inspect self}"
+    Logger.debug "Starting the RouteServer process #{inspect self}"
 
-    # Get the current time for our updater system to use...
-    now = Ecto.DateTime.utc
+    # This agent keeps track of the last time we fetched our routes (if ever).
+    # Tuple: {started_at, last_fetch}
+    Agent.start_link(fn -> {Ecto.DateTime.utc, nil} end, name: __MODULE__)
 
-    # Load up the routes from the DB.
-    routes = Repo.all(from host in Host,
-                      join: route in Route, on: route.host_id == host.id,
-                      select: {host.hostname, host.port, route.hostname, route.port})
+    # Try to load all the routes at startup.
+    spawn(__MODULE__, :load_all_routes, [])
 
-    Logger.debug(inspect(routes))
-
-    hosts_to_routes = get_route_hashdict(routes)
-
-    Logger.debug(inspect(hosts_to_routes))
-
-    Enum.each(hosts_to_routes, fn({k, v}) ->
-      # We can dirty put on initial load, because there won't be any records
-      # with matching keys...
-      ConCache.dirty_put(:routes, k, v)
-    end)
-
-    updater_pid = spawn_link(__MODULE__, :update_routes, [now])
+    updater_pid = spawn_link(__MODULE__, :update_routes, [])
 
     {:ok, updater_pid}
   end
 
-  def update_routes(last_update) do
+  def load_all_routes() do
+    Logger.debug "Performing initial route load."
+    now = Ecto.DateTime.utc
+    try do
+      routes = Repo.all(from host in Host,
+                        join: route in Route, on: route.host_id == host.id,
+                        select: {host.hostname, host.port, route.hostname, route.port})
+
+      get_route_hashdict(routes)
+      |> Enum.each(fn({k, v}) ->
+        # We can dirty put on initial load, because there won't be any routes
+        # with matching keys...
+        ConCache.dirty_put(:routes, k, v)
+      end)
+
+      Agent.update(__MODULE__, fn state ->
+        {elem(state, 0), now}
+      end)
+      Logger.debug "Routes loaded at #{inspect now}"
+    rescue
+      e ->
+        Logger.error "Error performing initial route load: #{inspect e}"
+    end
+    :ok
+  end
+
+  def update_routes() do
     receive do
+    # TODO: Make this value configurable...
     after 60000 ->
       Logger.debug "updating routes..."
       now = Ecto.DateTime.utc
-      routes = Repo.all(from host in Host,
-                        join: route in Route, on: route.host_id == host.id,
-                        where: host.updated_at > ^last_update,
-                        select: {host.hostname, host.port, route.hostname, route.port})
 
-      Logger.debug "new routes: #{inspect routes}"
+      case Agent.get(__MODULE__, fn state -> state end) do
+        {_started, nil} ->
+          # The initial load of routes failed for some reason. Try it now.
+          Logger.debug "Cannot update routes -- initial route list has not yet been loaded."
+          load_all_routes()
 
-      # Overwrite the old routes
-      get_route_hashdict(routes)
-      |> Enum.each(fn({k, v}) ->
-        ConCache.put(:routes, k, v)        
-      end)
+        {_started, last_fetch} ->
+          try do
+            routes = Repo.all(from host in Host,
+                              join: route in Route, on: route.host_id == host.id,
+                              where: host.updated_at > ^last_fetch,
+                              select: {host.hostname, host.port, route.hostname, route.port})
 
+            if (length(routes) == 0) do
+            else
+              Logger.debug "updated (or new) routes: #{inspect routes}"
+
+              # Overwrite the old routes
+              get_route_hashdict(routes)
+              |> Enum.each(fn({k, v}) ->
+                ConCache.put(:routes, k, v)        
+              end)
+            end
+
+            Agent.update(__MODULE__, fn state ->
+              {elem(state, 0), now}
+            end)
+
+            Logger.debug "Routes updated at #{inspect now}"
+          rescue
+            e -> 
+              Logger.error "Error updating routes: #{inspect e}"
+          end
+
+        other ->
+          Logger.error "Unexpected result retrieving RouteServer agent state: #{inspect other}"
+      end
     end
 
-    update_routes(now)
+    # Tail-call back into this function, setting up our update loop.
+    update_routes()
   end
 
   defp get_route_hashdict(routes) do
