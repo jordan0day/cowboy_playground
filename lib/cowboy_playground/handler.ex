@@ -16,7 +16,29 @@ defmodule CowboyPlayground.Handler do
   end
 
   def handle(req, state) do
+    {path, req} = :cowboy_req.path(req)
 
+    if path == "cloudos_router_status" do
+      # Ignore everything else if the request is just the ELB's healthcheck
+      req = handle_status_request(req)
+      {:ok, req, {state, 0}}
+    else
+      {result, req, time} = handle_request(req, path)
+      {result, req, {state, time}}
+    end    
+  end
+
+  def terminate(_reason, _req, state) do
+    start_time = elem(state, 0)
+    req_time = elem(state, 1)
+
+    total_time = :timer.now_diff(:erlang.now(), start_time)
+
+    Logger.info "Total request time (time in router): #{inspect(div(total_time, 1000))}ms (#{inspect(div(total_time - req_time, 1000))}ms)"
+    :ok
+  end
+
+  defp handle_request(req, path) do
     {:ok, body, req} = :cowboy_req.body(req)
     
     # TODO: handle chunked request bodies larger than 8MB. By default, 8MB is
@@ -43,9 +65,7 @@ defmodule CowboyPlayground.Handler do
 
     if port == nil do
       port = 80
-    end
-
-    {path, req} = :cowboy_req.path(req)
+    end 
 
     {url, req} = :cowboy_req.url(req)
 
@@ -59,7 +79,7 @@ defmodule CowboyPlayground.Handler do
     case get_random_server(host, port) do
       nil ->
         {:ok, req} = :cowboy_req.reply(503, req)
-        {:ok, req, {state, 0}}
+        {:ok, req, 0}
 
       {server_host, server_port} ->
         new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
@@ -87,23 +107,49 @@ defmodule CowboyPlayground.Handler do
 
           {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response.headers), response.body, req)
 
-          {:ok, req, {state, time}}
+          {:ok, req, time}
         rescue
           e ->
             Logger.error inspect(e)
-            {:error, req, {state, 0}}
+            {:error, req, 0}
         end
-    end    
+    end
   end
 
-  def terminate(_reason, _req, state) do
-    start_time = elem(state, 0)
-    req_time = elem(state, 1)
+  defp handle_status_request(req) do
+    status = case Agent.get(__MODULE__, fn state -> state end) do
+      {_started, nil} ->
+        # Routes haven't been loaded yet, we can't process requests...
+        503
+      {_started, last_fetch} ->
+        # Todo: Make this TTL configurable
+        ttl = 600 # in seconds
+        erl_last_fetch = last_fetch |> Ecto.DateTime.to_erl
 
-    total_time = :timer.now_diff(:erlang.now(), start_time)
+        now = :erlang.now() |> :calendar.now_to_datetime
 
-    Logger.info "Total request time (time in router): #{inspect(div(total_time, 1000))}ms (#{inspect(div(total_time - req_time, 1000))}ms)"
-    :ok
+        {days, time} = :calendar.time_difference(erl_last_fetch, now)
+
+        if days > 0 || :calendar.time_to_seconds(time) > ttl do
+          # If it's been more than *ttl* since we've updated, let's fail
+          # this router's health check.
+          Logger.error "Routes haven't been updated since #{inspect last_fetch}. Router is not healthy."
+          503
+        else
+          # It's been less than *ttl* since our last update, router
+          # seems healthy.
+          200
+        end
+
+      other ->
+        Logger.error "Unexpected result retrieving RouteServer agent state: #{inspect other}"
+        503
+    end
+
+    Logger.debug "Handling status request from load balancer. Replying with #{inspect status}."
+    {:ok, req} = :cowboy_req.reply(status, req)
+
+    req
   end
 
   defp get_random_server(host, port) do
@@ -117,8 +163,5 @@ defmodule CowboyPlayground.Handler do
         index = :random.uniform(length(routes)) - 1
         Enum.at(routes, index)
     end
-
-    index = :random.uniform(length(routes)) - 1
-    Enum.at(routes, index)
   end
 end
