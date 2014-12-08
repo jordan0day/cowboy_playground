@@ -1,12 +1,23 @@
 require Logger
 
 defmodule CowboyPlayground.RouteServer do
+  @moduledoc """
+  The RouteServer handles initializing and updated the ETS cache which
+  contains the list of routes, as well as running an agent which maintains
+  a timestamp indicating the last time the route list was updated.
+  """
   import Ecto.Query
 
   alias CowboyPlayground.DB.Models.Host
   alias CowboyPlayground.DB.Models.Route
   alias CowboyPlayground.Repo
 
+  @doc """
+  This function starts the RouteServer agent, which contains state information
+  as a tuple of {server start time, last time routes were fetched}.
+  It also starts a child process which loads any updated route information
+  in an update loop.
+  """
   @spec start_link() :: {:ok, pid} | {:error, String.t}
   def start_link do
     Logger.debug "Starting the RouteServer process #{inspect self}"
@@ -23,6 +34,11 @@ defmodule CowboyPlayground.RouteServer do
     {:ok, updater_pid}
   end
 
+  @doc """
+  Loads *all* route information from the database and stores it in the ETS
+  cache. Updates the agent state with the time the initial load occurred, if
+  successful.
+  """
   def load_all_routes() do
     Logger.debug "Performing initial route load."
     now = Ecto.DateTime.utc
@@ -49,6 +65,11 @@ defmodule CowboyPlayground.RouteServer do
     :ok
   end
 
+  @doc """
+  Checks the agent state for the last successful route update, and then loads
+  any route with an updated_at time newer than that. Updates the ETS cache
+  with the new routes.
+  """
   def update_routes() do
     receive do
     # TODO: Make this value configurable...
