@@ -40,12 +40,24 @@ defmodule DB.Queries.CowboyPlayground.Test do
   test "find_routes_for_host host 1", context do
     host1_routes = Repo.all(RouteQuery.find_routes_for_host(context[:host].hostname, context[:host].port))
 
-    assert host1_routes == context[:host1_routes]
+    assert length(host1_routes) == length(context[:host1_routes])
+
+    Enum.each(context[:host1_routes], fn route ->
+      assert Enum.any?(host1_routes, fn r ->
+        r == route
+      end)
+    end)
   end
 
   test "find_routes_for_host host 2", context do
     host2_routes = Repo.all(RouteQuery.find_routes_for_host(context[:host2].hostname, context[:host2].port))
 
-    assert host2_routes == context[:host2_routes]
+    assert length(host2_routes) == length(context[:host2_routes])
+
+    Enum.each(context[:host2_routes], fn route ->
+      assert Enum.any?(host2_routes, fn r ->
+        r == route
+      end)
+    end)
   end
 end
