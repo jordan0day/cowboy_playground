@@ -84,6 +84,7 @@ defmodule CowboyPlayground.RouteServer do
           load_all_routes()
 
         {_started, last_fetch} ->
+          Logger.debug "Now: #{inspect now}. Last fetch: #{inspect last_fetch}"
           try do
             routes = Repo.all(from host in Host,
                               join: route in Route, on: route.host_id == host.id,
@@ -91,6 +92,7 @@ defmodule CowboyPlayground.RouteServer do
                               select: {host.hostname, host.port, route.hostname, route.port})
 
             if (length(routes) == 0) do
+              Logger.debug "No updated routes found."
             else
               Logger.debug "updated (or new) routes: #{inspect routes}"
 
@@ -105,7 +107,7 @@ defmodule CowboyPlayground.RouteServer do
               {elem(state, 0), now}
             end)
 
-            Logger.debug "Routes updated at #{inspect now}"
+            Logger.debug "Finished updating routes at #{inspect now}"
           rescue
             e -> 
               Logger.error "Error updating routes: #{inspect e}"
