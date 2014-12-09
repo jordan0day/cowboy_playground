@@ -6,16 +6,12 @@ defmodule CowboyPlayground do
 
     :random.seed(:erlang.now())
 
-    # TODO: Move the cowboy startup to occur *after* we've started up con_cache
-    # and read in the route database. We don't want to start handling requests
-    # until we're actually ready to handle them, after all...
     dispatch = :cowboy_router.compile([{:_, [{:_, CowboyPlayground.Handler, []}]}])
     proto_opts = [ {:env, [ {:dispatch, dispatch} ]}, {:onrequest, &CowboyPlayground.Handler.on_request/1} ]
 
-    IO.puts "dispatch: #{inspect dispatch}"
-
+    # TODO: Move the # of acceptors and port into env vars. Currently
+    # hardcoded to 100 and 8080.
     {:ok, cowboy_pid} = :cowboy.start_http(:playground, 100, [{:port, 8080}], proto_opts)
-    IO.puts "cowboy_pid: #{inspect cowboy_pid}"
 
     children = [
       worker(CowboyPlayground.Repo, []),
@@ -28,13 +24,6 @@ defmodule CowboyPlayground do
       worker(CowboyPlayground.RouteServer, [])
     ]
 
-    {:ok, pid} = Supervisor.start_link(children, [strategy: :one_for_one, name: CloudosBuildServer.Supervisor])
-    IO.puts "supervisor pid: #{inspect pid}"
-
-    # TODO: Read the routes in from some kind of database. Eventually have a
-    # child process that refreshes the route list every 300 seconds or so...
-    #ConCache.put(:routes, "localhost", [{"localhost", 4010}, {"localhost", 4011}])
-
-    {:ok, pid}
+    Supervisor.start_link(children, [strategy: :one_for_one, name: CloudosBuildServer.Supervisor])
   end
 end
