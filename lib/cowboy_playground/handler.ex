@@ -88,7 +88,13 @@ defmodule CowboyPlayground.Handler do
         {:ok, req, 0}
 
       {server_host, server_port, use_secure_connection} ->
-        new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
+        proto = if use_secure_connection do
+          "https"
+        else
+          "http"
+        end
+
+        new_url = Regex.replace(~r/^#{host_url}/, url, "#{proto}://#{server_host}:#{server_port}")
 
         method = case method do
           "DELETE" -> :delete
