@@ -4,11 +4,12 @@ defmodule CowboyPlayground.DB.Models.Route do
   alias CowboyPlayground.DB.Models.Host
 
   schema "routes" do
-    belongs_to :host,   Host
-    field :hostname,    :string
-    field :port,        :integer
-    field :created_at,  :datetime
-    field :updated_at,  :datetime
+    belongs_to :host,          Host
+    field :hostname,           :string
+    field :port,               :integer
+    field :created_at,         :datetime
+    field :updated_at,         :datetime
+    field :secure_connection,  :boolean
   end
 
   validate host,
