@@ -5,7 +5,6 @@ defmodule CowboyPlayground.Handler do
   def on_request(req) do
     # TODO: Move request handling out of handle and into on_request,
     # which should slightly speed up routing time.
-    Logger.debug inspect(req)
     req
   end
 
@@ -23,6 +22,7 @@ defmodule CowboyPlayground.Handler do
       req = handle_status_request(req)
       {:ok, req, {state, 0}}
     else
+      Logger.debug inspect(req)
       {result, req, time} = handle_request(req, path)
       {result, req, {state, time}}
     end    
@@ -117,7 +117,13 @@ defmodule CowboyPlayground.Handler do
           {time, {result, response}} = :timer.tc(HTTPoison, :request, [method, new_url, body, headers])
           Logger.debug "Call to #{new_url} completed with #{inspect result} in #{div(time, 1000)}ms."
 
-          {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response.headers), response.body, req)
+          # TODO: We're currently buffering the entire response and sending it in one blob to the client.
+          # So we have to delete the transfer-encoding header since it's no longer chunked.
+          # We need to fix the router so it doesn't buffer the entire response, but instead sends the
+          # chunks back to the client in the order it receives them from the backend.
+          response_headers = Map.delete(response.headers, "transfer-encoding")
+
+          {:ok, req} = :cowboy_req.reply(response.status_code, Map.to_list(response_headers), response.body, req)
 
           {:ok, req, time}
         rescue
