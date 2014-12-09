@@ -49,11 +49,11 @@ defmodule CowboyPlayground.Handler do
 
     {headers, req} = :cowboy_req.headers(req)
 
-    # {peer, req} = :cowboy_req.peer(req)
+    {peer, req} = :cowboy_req.peer(req)
 
     {querystring, req} = :cowboy_req.qs(req)
 
-    # {version, req} = :cowboy_req.version(req)
+    {version, req} = :cowboy_req.version(req)
 
     {host, req} = :cowboy_req.host(req)
 
@@ -62,6 +62,12 @@ defmodule CowboyPlayground.Handler do
     {host_url, req} = :cowboy_req.host_url(req)
 
     {port, req} = :cowboy_req.port(req)
+
+    {forwarded_for, req} = :cowboy_req.header("x-forwarded-for", req, nil)
+
+    {forwarded_port, req} = :cowboy_req.header("x-forwarded-port", req, nil)
+
+    {forwarded_proto, req} = :cowboy_req.header("x-forwarded-proto", req, nil)
 
     if port == nil do
       port = 80
@@ -154,7 +160,7 @@ defmodule CowboyPlayground.Handler do
 
   defp get_random_server(host, port) do
     routes = ConCache.get(:routes, "#{host}:#{port}")
-    Logger.debug "Routes matching #{host}: #{inspect routes}"
+    Logger.debug "Routes matching #{host}:#{port}: #{inspect routes}"
 
     case routes do
       nil -> nil
