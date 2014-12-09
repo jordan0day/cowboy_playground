@@ -87,7 +87,7 @@ defmodule CowboyPlayground.Handler do
         {:ok, req} = :cowboy_req.reply(503, req)
         {:ok, req, 0}
 
-      {server_host, server_port} ->
+      {server_host, server_port, use_secure_connection} ->
         new_url = Regex.replace(~r/^#{host_url}/, url, "http://#{server_host}:#{server_port}")
 
         method = case method do

@@ -45,7 +45,7 @@ defmodule CowboyPlayground.RouteServer do
     try do
       routes = Repo.all(from host in Host,
                         join: route in Route, on: route.host_id == host.id,
-                        select: {host.hostname, host.port, route.hostname, route.port})
+                        select: {host.hostname, host.port, route.hostname, route.port, route.secure_connection})
 
       get_route_hashdict(routes)
       |> Enum.each(fn({k, v}) ->
@@ -87,7 +87,7 @@ defmodule CowboyPlayground.RouteServer do
             routes = Repo.all(from host in Host,
                               join: route in Route, on: route.host_id == host.id,
                               where: host.updated_at > ^last_fetch,
-                              select: {host.hostname, host.port, route.hostname, route.port})
+                              select: {host.hostname, host.port, route.hostname, route.port, route.secure_connection})
 
             if (length(routes) == 0) do
               Logger.debug "No updated routes found."
@@ -122,12 +122,12 @@ defmodule CowboyPlayground.RouteServer do
 
   defp get_route_hashdict(routes) do
     Enum.reduce(routes, HashDict.new(), fn(tup, dict) ->
-      # Tuple: {host hostname, host port, route hostname, route port}
+      # Tuple: {host hostname, host port, route hostname, route port, route.secure_connection}
       host = "#{elem(tup, 0)}:#{elem(tup, 1)}"
 
       HashDict.merge(
         dict,
-        HashDict.put(HashDict.new(), host, [{elem(tup, 2), elem(tup, 3)}]),
+        HashDict.put(HashDict.new(), host, [{elem(tup, 2), elem(tup, 3), elem(tup, 4)}]),
         fn (key, v1, v2) ->
           v1 ++ v2
         end)
