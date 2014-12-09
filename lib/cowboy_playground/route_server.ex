@@ -74,7 +74,6 @@ defmodule CowboyPlayground.RouteServer do
     receive do
     # TODO: Make this value configurable...
     after 60000 ->
-      Logger.debug "updating routes..."
       now = Ecto.DateTime.utc
 
       case Agent.get(__MODULE__, fn state -> state end) do
@@ -84,7 +83,6 @@ defmodule CowboyPlayground.RouteServer do
           load_all_routes()
 
         {_started, last_fetch} ->
-          Logger.debug "Now: #{inspect now}. Last fetch: #{inspect last_fetch}"
           try do
             routes = Repo.all(from host in Host,
                               join: route in Route, on: route.host_id == host.id,
